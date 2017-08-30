@@ -1,0 +1,13 @@
+/bin/
+/doc/
+/tmp/
+.directory
+.idea/TP2.iml
+.idea/misc.xml
+.idea/modules.xml
+.idea/workspace.xml
+.idea/inspectionProfiles/Project_Default.xml
+cmake-build-debug/CMakeCache.txt
+cmake-build-debug/CMakeFiles/
+cmake-build-debug/cmake_install.cmake
+cmake-build-debug/Makefile
