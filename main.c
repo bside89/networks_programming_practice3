@@ -20,16 +20,16 @@
     (((i) & 0x01ll) ? '1' : '0')
 
 #define PRI_BIN_INT16 \
-    PRI_BIN_INT8              PRI_BIN_INT8
+    PRI_BIN_INT8    "."     PRI_BIN_INT8
 #define BYTE_TO_BINARY_INT16(i) \
     BYTE_TO_BINARY_INT8((i) >> 8),   BYTE_TO_BINARY_INT8(i)
 #define PRI_BIN_INT32 \
-    PRI_BIN_INT16             PRI_BIN_INT16
+    PRI_BIN_INT16   "."     PRI_BIN_INT16
 #define BYTE_TO_BINARY_INT32(i) \
     BYTE_TO_BINARY_INT16((i) >> 16), BYTE_TO_BINARY_INT16(i)
 
-#define N 16
-#define TAB_FORMAT "%12s"
+#define ADDR_BITS_SIZE  32
+#define TAB_FORMAT      "%12s"
 
 rs_opt options;
 short shutdown_flag;
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     struct in_addr rand_ip;
     struct in_addr rand_sm;
     struct in_addr ip_masked;
-    int n = 0;
+    int n;
 
     signal(SIGINT, sigint_handler);
     srand((unsigned int) time(NULL)); // Generate random seed
@@ -56,11 +56,11 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
     puts(DIV_LINE);
-    while (!shutdown_flag) {
+    for (n = 0; !shutdown_flag; n++) {
 #if DEBUG > 0
         puts(MINOR_DIV_LINE);
         puts("Generating random IP address and netmask:");
-        n = (n % 32) + 1;
+        n = (n % (ADDR_BITS_SIZE + 1));
         printf(""TAB_FORMAT" (pfx): /%d\n", "Subnet", n);
         generate_netmask(n, &rand_sm);
         debug_print_address_data("Subnet", rand_sm);
@@ -91,7 +91,7 @@ void generate_random_ip(struct in_addr *ip) {
 void generate_netmask(int prefix, struct in_addr *nm) {
     static const uint32_t max = 0xFFFFFFFF;
     memset(nm, 0, sizeof(struct in_addr));
-    nm->s_addr = htonl((max << (32 - prefix)) & max);
+    nm->s_addr = (prefix == 0) ? 0 : htonl((max << (ADDR_BITS_SIZE - prefix)) & max);
 }
 
 void debug_print_address_data(const char *label, struct in_addr addr) {
