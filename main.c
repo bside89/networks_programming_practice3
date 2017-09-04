@@ -8,8 +8,8 @@
 #include "lib/common.h"
 #include "lib/debug.h"
 
-#define PRI_BIN_INT8 "%c%c%c%c%c%c%c%c"
-#define BYTE_TO_BINARY_INT8(i)    \
+#define PRI_BIN_INT8            "%c%c%c%c%c%c%c%c"
+#define BYTE_TO_BIN_INT8(i)     \
     (((i) & 0x80ll) ? '1' : '0'), \
     (((i) & 0x40ll) ? '1' : '0'), \
     (((i) & 0x20ll) ? '1' : '0'), \
@@ -19,17 +19,13 @@
     (((i) & 0x02ll) ? '1' : '0'), \
     (((i) & 0x01ll) ? '1' : '0')
 
-#define PRI_BIN_INT16 \
-    PRI_BIN_INT8    "."     PRI_BIN_INT8
-#define BYTE_TO_BINARY_INT16(i) \
-    BYTE_TO_BINARY_INT8((i) >> 8),   BYTE_TO_BINARY_INT8(i)
-#define PRI_BIN_INT32 \
-    PRI_BIN_INT16   "."     PRI_BIN_INT16
-#define BYTE_TO_BINARY_INT32(i) \
-    BYTE_TO_BINARY_INT16((i) >> 16), BYTE_TO_BINARY_INT16(i)
+#define PRI_BIN_INT16           PRI_BIN_INT8 "." PRI_BIN_INT8
+#define BYTE_TO_BIN_INT16(i)    BYTE_TO_BIN_INT8((i) >> 8), BYTE_TO_BIN_INT8(i)
+#define PRI_BIN_INT32           PRI_BIN_INT16 "." PRI_BIN_INT16
+#define BYTE_TO_BIN_INT32(i)    BYTE_TO_BIN_INT16((i) >> 16), BYTE_TO_BIN_INT16(i)
 
-#define ADDR_BITS_SIZE  32
-#define TAB_FORMAT      "%12s"
+#define ADDR_BITS_SIZE          32
+#define TAB_FORMAT              "%12s"
 
 rs_opt options;
 short shutdown_flag;
@@ -97,7 +93,7 @@ void generate_netmask(int prefix, struct in_addr *nm) {
 void debug_print_address_data(const char *label, struct in_addr addr) {
     printf(""TAB_FORMAT" (int): %u\n", label, addr.s_addr);
     printf(""TAB_FORMAT" (bin): "PRI_BIN_INT32 "\n", label,
-           BYTE_TO_BINARY_INT32(htonl(addr.s_addr)));
+           BYTE_TO_BIN_INT32(htonl(addr.s_addr)));
     printf(""TAB_FORMAT" (cod): ", label);
     printf(inet_ntoa(addr));
     putchar('\n');

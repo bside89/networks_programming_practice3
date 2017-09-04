@@ -4,18 +4,24 @@
 #include <netinet/in.h>
 #include <ifaddrs.h>
 
-#define INTERFACE_NAME_MAX_LENGTH 30
+#define ROUTER_NAME_MAX_LENGTH 8
+#define INTERFACE_NAME_MAX_LENGTH 20
 
 typedef struct {
     struct in_addr ip;
     struct in_addr subnet_mask;
     struct in_addr gateway;
     char interface_name[INTERFACE_NAME_MAX_LENGTH];
-} router_table_entry;
+} routers_table_entry;
 
 typedef struct {
     size_t size;
-    router_table_entry *table;
-} router_table;
+    routers_table_entry *table;
+} routers_table;
+
+typedef struct {
+    char name[ROUTER_NAME_MAX_LENGTH];
+    routers_table table;
+} router;
 
 #endif //TP3_ROUTERS_H
