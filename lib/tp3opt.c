@@ -87,6 +87,7 @@ int rsopt_is_option_valid(int mode) {
 }
 
 void rsopt_debug(rs_opt *o) {
+    puts(DIV_LINE);
     puts("ROUTER SIMULATOR OPT INFO (DEBUG MODE)");
     puts("File config:");
     printf("-> Router's table:    <%s>\n", o->router_tables_file);
