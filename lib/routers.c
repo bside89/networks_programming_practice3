@@ -4,6 +4,7 @@
 #include "routers.h"
 #include "common.h"
 #include "packet.h"
+#include "debug.h"
 
 #define REGISTRY_SIZE 60
 
@@ -57,6 +58,7 @@ void rs_get_routing_tables_data(FILE *source, network_topology *data) {
                    re->interface_name);
             // Define IP (registry)
             inet_aton(ip_buffer, &re->ip);
+            re->ip.s_addr = htonl(re->ip.s_addr);
 
             // Define subnet mask  (registry)
             pkt_generate_netmask(re->subnet_mask_prefix, &pkt);
@@ -64,6 +66,7 @@ void rs_get_routing_tables_data(FILE *source, network_topology *data) {
 
             // Define gateway IP (next hop) (registry)
             inet_aton(gw_buffer, &re->gateway);
+            re->gateway.s_addr = htonl(re->gateway.s_addr);
         }
     }
 }
@@ -103,6 +106,7 @@ void rs_get_interface_tables_data(FILE *source, network_topology *data) {
 
             // Define IP (registry)
             inet_aton(ip_buffer, &ie->ip);
+            ie->ip.s_addr = htonl(ie->ip.s_addr);
         }
     }
 }
@@ -111,9 +115,14 @@ void rs_send_packet(packet p, network_topology *top, int routerIndex) {
     int i, j, k;
     router *r;
     routers_table_entry *re;
+    routers_table_entry *re_better_result = NULL;
     interfaces_table_entry *ie;
+    interfaces_table_entry *ie_better_result = NULL;
     uint32_t result;
     struct in_addr *next_hop;
+#if PROJECT_DEBUG > 1
+    char ip_debug[IP_ADDRESS_SIZE];
+#endif
     char ip_buffer1[IP_ADDRESS_SIZE];
     char ip_buffer2[IP_ADDRESS_SIZE];
 
@@ -123,42 +132,73 @@ void rs_send_packet(packet p, network_topology *top, int routerIndex) {
     sprintf(ip_buffer1, "%s", inet_ntoa(p.dest_addr));
     // Verify the interface's table for 'r'
     for (i = 0; i < r->it.size; i++) {
-        puts("Verifying interfaces..."); // TODO remove debug line
         ie = &r->it.table[i];
-        if (p.dest_addr.s_addr == ie->ip.s_addr) {
-            // Ex: r2 is forwarding packet for 1.2.3.4 over eth0 interface
-            printf("%s is forwarding packet for %s over %s interface.",
-            r->name, ip_buffer1, ie->interface_name);
-            return; // Send over to the interface and close connection
+#if PROJECT_DEBUG > 1
+        printf("Verifying interfaces <%d, for %d>...\n", i, routerIndex);
+        printf("IP (from %s):", ie->interface_name);
+        puts(inet_ntoa(ie->ip));
+#endif
+        result = p.dest_addr.s_addr & ie->subnet_mask.s_addr;
+        if (result == ie->ip.s_addr) {
+            // Long prefix match
+            if (!ie_better_result || ie_better_result->subnet_mask_prefix > ie->subnet_mask_prefix) {
+                ie_better_result = ie; // Stores the long prefix 'ie'
+            }
         }
+    }
+    if (ie_better_result) { // Found a match
+        // Ex: r2 is forwarding packet for 1.2.3.4 over eth0 interface
+        printf("%s is forwarding packet for %s over %s interface.\n",
+               r->name, ip_buffer1, ie_better_result->interface_name);
+        return; // Send over to the interface and close connection
     }
     // Verify, now, the routing's table for 'r'
     for (i = 0; i < r->rt.size; i++) {
-        puts("Verifying routes..."); // TODO remove debug line
+#if PROJECT_DEBUG > 1
+        printf("Verifying routes <%d>...\n", i);
+#endif
         re = &r->rt.table[i];
-        result = re->subnet_mask.s_addr & p.dest_addr.s_addr;
+        result = p.dest_addr.s_addr & re->subnet_mask.s_addr;
         if (result == re->ip.s_addr) { // If matched, send to the next hop
             next_hop = &re->gateway;
+#if PROJECT_DEBUG
+            puts("Addresses matched. Searching next hop now...");
+            printf("Address (packet): ");
+            puts(inet_ntoa(re->ip));
+            printf("And the gateway is: ");
+            puts(inet_ntoa(*next_hop));
+#endif
             // Verify all interface's table to see who is the next router in hop
-            for (j = 0; j != routerIndex && j < top->size; j++) {
-                puts("Verifying interfaces for determine next hop..."); // TODO
-                // remove debug line
+            for (j = 0; j < top->size; j++) {
+                if (j == routerIndex)
+                    continue;
+#if PROJECT_DEBUG > 1
+                printf("Verifying interfaces for determine next hop <%d>...\n", j);
+#endif
                 for (k = 0; k < top->routers[j].it.size; k++) {
                     ie = &top->routers[j].it.table[k];
+#if PROJECT_DEBUG > 1
+                    printf("IP (from %s):", ie->interface_name);
+                    puts(inet_ntoa(ie->ip));
+#endif
                     // If address is equal to the next_hop
                     if (ie->ip.s_addr == next_hop->s_addr) {
                         sprintf(ip_buffer2, "%s", inet_ntoa(*next_hop));
                         // Ex: r1 is forwarding packet for 1.2.3.4 to next
                         // hop 1.2.3.5 over eth1 interface
                         printf("%s is forwarding packet for %s to next hop %s over"
-                                       " %s interface.", r->name, ip_buffer1,
+                                       " %s interface.\n", r->name, ip_buffer1,
                                ip_buffer2, ie->interface_name);
                         rs_send_packet(p, top, j);
+                        return;
                     }
                 }
             }
         }
     }
+    sprintf(ip_buffer1, "%s", inet_ntoa(p.dest_addr));
+    printf("%s is discarding packet %s because no destiny were found.\n",
+           r->name, ip_buffer1);
 }
 
 void rs_debug(network_topology *data) {
@@ -185,7 +225,7 @@ void rs_debug(network_topology *data) {
             printf("; ");
             printf("Subnet mask (/%d): ", re->subnet_mask_prefix);
             tmp = re->subnet_mask;
-            tmp.s_addr = htonl(tmp.s_addr);
+            //tmp.s_addr = htonl(tmp.s_addr);
             printf(inet_ntoa(tmp));
             printf("; ");
             printf("Gateway (net hop): ");
@@ -210,7 +250,7 @@ void rs_debug(network_topology *data) {
             printf("Interface: %s; ", ie->interface_name);
             printf("Subnet mask (/%d): ", ie->subnet_mask_prefix);
             tmp = ie->subnet_mask;
-            tmp.s_addr = htonl(tmp.s_addr);
+            //tmp.s_addr = htonl(tmp.s_addr);
             printf(inet_ntoa(tmp));
             printf("; ");
             printf("IP: ");
