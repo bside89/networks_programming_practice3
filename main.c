@@ -2,10 +2,8 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
-#include <time.h>
 #include "lib/tp3opt.h"
 #include "lib/common.h"
-#include "lib/debug.h"
 #include "lib/routers.h"
 #include "lib/packet.h"
 
@@ -31,64 +29,48 @@ rs_opt options;
 short shutdown_flag;
 
 void sigint_handler(int);
-void generate_random_ip(struct in_addr*);
 void debug_print_address_data(const char*, struct in_addr);
 
 int main(int argc, char *argv[]) {
 
     network_topology top;
-    struct in_addr rand_ip;
-    struct in_addr rand_sm;
+    packet rand_ip;
+    packet rand_sm;
     struct in_addr ip_masked;
     int n;
 
     signal(SIGINT, sigint_handler);
-    srand((unsigned int) time(NULL)); // Generate random seed
 
     // Set options for application
     if (rsopt_set(argc, argv, &options) < 0) {
         fprintf(stderr, "A error occurred. Exiting application.\n");
         return EXIT_FAILURE;
     }
-
     memset(&top, 0, sizeof(top));
     rs_open(options.router_tables_file, options.interface_info_files, &top);
-    rs_debug(&top);
-
-    puts("Press any key to continue...");
+    if (options.debug_opt)
+        rs_debug(&top);
+    puts("Press any key to continue and generate first package...");
     getchar();
     puts(DIV_LINE);
     for (n = 0; !shutdown_flag; n++) {
-#if DEBUG > 0
         puts(MINOR_DIV_LINE);
-        puts("Generating random IP address and netmask:");
-        n = (n % (ADDR_BITS_SIZE + 1));
-        printf(""TAB_FORMAT" (pfx): /%d\n", "Subnet", n);
-        pkt_generate_netmask(n, &rand_sm);
-        debug_print_address_data("Subnet", rand_sm);
-        generate_random_ip(&rand_ip);
-        debug_print_address_data("IP", rand_ip);
-        ip_masked.s_addr = rand_ip.s_addr & rand_sm.s_addr;
-        debug_print_address_data("IP AND Sub", ip_masked);
-        puts(MINOR_DIV_LINE);
-        puts(DIV_LINE);
-        usleep(1000);
-#endif
+        puts("Generating random IP address...");
+        pkt_generate_random_ip(&rand_ip);
+        if (options.debug_opt)
+            debug_print_address_data("IP", rand_ip.dest_addr);
+        rs_send_packet(rand_ip, &top, 0);
+        puts("Press any key to generate another package...");
+        getchar();
     }
     puts("\nExiting application...");
+    rs_close(&top);
     sleep(1);
     return 0;
 }
 
 void sigint_handler(int signum) {
     shutdown_flag = 1;
-}
-
-void generate_random_ip(struct in_addr *ip) {
-    static const uint32_t min = 0xC0A80000; // 192.168.0.0
-    static const uint32_t max = 0xC0A8FFFF; // 192.168.255.255
-    memset(ip, 0, sizeof(struct in_addr));
-    ip->s_addr = rand() % (max - min + 1) + min;
 }
 
 void debug_print_address_data(const char *label, struct in_addr addr) {

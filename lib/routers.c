@@ -29,6 +29,7 @@ void rs_get_routing_tables_data(FILE *source, network_topology *data) {
     int i, j;
     router *r;
     routers_table_entry *re;
+    packet pkt;
     char buffer_line[REGISTRY_SIZE];
     char ip_buffer[IP_ADDRESS_SIZE];
     char gw_buffer[IP_ADDRESS_SIZE];
@@ -40,11 +41,6 @@ void rs_get_routing_tables_data(FILE *source, network_topology *data) {
         // Define name
         fgets(buffer_line, REGISTRY_SIZE, source);
         sscanf(buffer_line, "%s", r->name);
-
-        fgets(buffer_line, REGISTRY_SIZE, source);
-        memset(ip_buffer, 0, sizeof(ip_buffer));
-        sscanf(buffer_line, "%s", ip_buffer);
-        inet_aton(ip_buffer, &r->ip); // Define IP
 
         fgets(buffer_line, REGISTRY_SIZE, source);
         sscanf(buffer_line, "%zu", &r->rt.size); // Define routing's table size
@@ -63,7 +59,8 @@ void rs_get_routing_tables_data(FILE *source, network_topology *data) {
             inet_aton(ip_buffer, &re->ip);
 
             // Define subnet mask  (registry)
-            pkt_generate_netmask(re->subnet_mask_prefix, &re->subnet_mask);
+            pkt_generate_netmask(re->subnet_mask_prefix, &pkt);
+            re->subnet_mask = pkt.dest_addr;
 
             // Define gateway IP (next hop) (registry)
             inet_aton(gw_buffer, &re->gateway);
@@ -75,6 +72,7 @@ void rs_get_interface_tables_data(FILE *source, network_topology *data) {
     int i, j;
     router *r;
     interfaces_table_entry *ie;
+    packet pkt;
     char buffer_line[REGISTRY_SIZE];
     char name[INTERFACE_NAME_MAX_LENGTH];
     char ip_buffer[IP_ADDRESS_SIZE];
@@ -99,11 +97,66 @@ void rs_get_interface_tables_data(FILE *source, network_topology *data) {
             // Define name
             strcpy(ie->interface_name, name);
 
-            // Define subnet mask  (registry)
-            pkt_generate_netmask(ie->subnet_mask_prefix, &ie->subnet_mask);
+            // Define subnet mask (registry)
+            pkt_generate_netmask(ie->subnet_mask_prefix, &pkt);
+            ie->subnet_mask = pkt.dest_addr;
 
             // Define IP (registry)
             inet_aton(ip_buffer, &ie->ip);
+        }
+    }
+}
+
+void rs_send_packet(packet p, network_topology *top, int routerIndex) {
+    int i, j, k;
+    router *r;
+    routers_table_entry *re;
+    interfaces_table_entry *ie;
+    uint32_t result;
+    struct in_addr *next_hop;
+    char ip_buffer1[IP_ADDRESS_SIZE];
+    char ip_buffer2[IP_ADDRESS_SIZE];
+
+    if (!(top->size > 0 && routerIndex >= 0 && routerIndex < top->size))
+        return;
+    r = &top->routers[routerIndex];
+    sprintf(ip_buffer1, "%s", inet_ntoa(p.dest_addr));
+    // Verify the interface's table for 'r'
+    for (i = 0; i < r->it.size; i++) {
+        puts("Verifying interfaces..."); // TODO remove debug line
+        ie = &r->it.table[i];
+        if (p.dest_addr.s_addr == ie->ip.s_addr) {
+            // Ex: r2 is forwarding packet for 1.2.3.4 over eth0 interface
+            printf("%s is forwarding packet for %s over %s interface.",
+            r->name, ip_buffer1, ie->interface_name);
+            return; // Send over to the interface and close connection
+        }
+    }
+    // Verify, now, the routing's table for 'r'
+    for (i = 0; i < r->rt.size; i++) {
+        puts("Verifying routes..."); // TODO remove debug line
+        re = &r->rt.table[i];
+        result = re->subnet_mask.s_addr & p.dest_addr.s_addr;
+        if (result == re->ip.s_addr) { // If matched, send to the next hop
+            next_hop = &re->gateway;
+            // Verify all interface's table to see who is the next router in hop
+            for (j = 0; j != routerIndex && j < top->size; j++) {
+                puts("Verifying interfaces for determine next hop..."); // TODO
+                // remove debug line
+                for (k = 0; k < top->routers[j].it.size; k++) {
+                    ie = &top->routers[j].it.table[k];
+                    // If address is equal to the next_hop
+                    if (ie->ip.s_addr == next_hop->s_addr) {
+                        sprintf(ip_buffer2, "%s", inet_ntoa(*next_hop));
+                        // Ex: r1 is forwarding packet for 1.2.3.4 to next
+                        // hop 1.2.3.5 over eth1 interface
+                        printf("%s is forwarding packet for %s to next hop %s over"
+                                       " %s interface.", r->name, ip_buffer1,
+                               ip_buffer2, ie->interface_name);
+                        rs_send_packet(p, top, j);
+                    }
+                }
+            }
         }
     }
 }
@@ -123,9 +176,6 @@ void rs_debug(network_topology *data) {
     for (i = 0; i < data->size; i++) {
         r = &data->routers[i];
         printf("Name: %s\n", r->name);
-        printf("IP: ");
-        printf(inet_ntoa(r->ip));
-        putchar('\n');
         printf("Table values (size = %zu):\n", r->rt.size);
         for (j = 0; j < r->rt.size; j++) {
             re = &r->rt.table[j];
@@ -179,7 +229,6 @@ void rs_close(network_topology *data) {
     for (i = 0; i < data->size; i++) {
         free(data->routers[i].rt.table);
         free(data->routers[i].it.table);
-        data->routers[i].rt.table = NULL;
-        data->routers[i].it.table = NULL;
     }
+    memset(data, 0, sizeof(network_topology));
 }

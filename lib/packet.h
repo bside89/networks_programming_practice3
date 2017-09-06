@@ -5,6 +5,12 @@
 
 #define ADDR_BITS_SIZE 32
 
-void pkt_generate_netmask(int prefix, struct in_addr *nm);
+typedef struct {
+    struct in_addr dest_addr;
+} packet;
+
+void pkt_generate_random_ip(packet *pkt);
+
+void pkt_generate_netmask(int prefix, packet *pkt);
 
 #endif //TP3_PACKET_H

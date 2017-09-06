@@ -4,6 +4,7 @@
 #include <netinet/in.h>
 #include <ifaddrs.h>
 #include <stdio.h>
+#include "packet.h"
 
 #define ROUTER_NAME_MAX_LENGTH 8
 #define INTERFACE_NAME_MAX_LENGTH 20
@@ -42,7 +43,6 @@ typedef struct {
 // Router
 typedef struct {
     char name[ROUTER_NAME_MAX_LENGTH];
-    struct in_addr ip;
     routers_table rt;
     interfaces_table it;
 } router;
@@ -55,9 +55,11 @@ typedef struct {
 
 int rs_open(const char *, const char *, network_topology *);
 
-void rs_get_routing_tables_data(FILE *source, network_topology *data);
+void rs_get_routing_tables_data(FILE *, network_topology *);
 
-void rs_get_interface_tables_data(FILE *source, network_topology *data);
+void rs_get_interface_tables_data(FILE *, network_topology *);
+
+void rs_send_packet(packet, network_topology *, int);
 
 void rs_debug(network_topology *);
 
