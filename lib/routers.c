@@ -112,7 +112,7 @@ void rs_get_interface_tables_data(FILE *source, network_topology *data) {
 }
 
 void rs_send_packet(packet p, network_topology *top, int routerIndex) {
-    int i, j, k;
+    int i, j;
     router *r;
     routers_table_entry *re;
     routers_table_entry *re_better_result = NULL;
@@ -120,6 +120,7 @@ void rs_send_packet(packet p, network_topology *top, int routerIndex) {
     interfaces_table_entry *ie_better_result = NULL;
     uint32_t result;
     struct in_addr *next_hop;
+    struct in_addr helper; // Dummy var to show correct byte order to user
 #if PROJECT_DEBUG > 1
     char ip_debug[IP_ADDRESS_SIZE];
 #endif
@@ -129,24 +130,28 @@ void rs_send_packet(packet p, network_topology *top, int routerIndex) {
     if (!(top->size > 0 && routerIndex >= 0 && routerIndex < top->size))
         return;
     r = &top->routers[routerIndex];
-    sprintf(ip_buffer1, "%s", inet_ntoa(p.dest_addr));
+    helper = p.dest_addr;
+    helper.s_addr = htonl(helper.s_addr);
+    sprintf(ip_buffer1, "%s", inet_ntoa(helper));
     // Verify the interface's table for 'r'
     for (i = 0; i < r->it.size; i++) {
         ie = &r->it.table[i];
 #if PROJECT_DEBUG > 1
         printf("Verifying interfaces <%d, for %d>...\n", i, routerIndex);
         printf("IP (from %s):", ie->interface_name);
-        puts(inet_ntoa(ie->ip));
+        helper = ie->ip;
+        helper.s_addr = htonl(helper.s_addr);
+        puts(inet_ntoa(helper));
 #endif
         result = p.dest_addr.s_addr & ie->subnet_mask.s_addr;
         if (result == ie->ip.s_addr) {
             // Long prefix match
-            if (!ie_better_result || ie_better_result->subnet_mask_prefix > ie->subnet_mask_prefix) {
-                ie_better_result = ie; // Stores the long prefix 'ie'
+            if (!ie_better_result || ie_better_result->subnet_mask_prefix < ie->subnet_mask_prefix) {
+                ie_better_result = ie; // Stores the longer prefix 'ie'
             }
         }
     }
-    if (ie_better_result) { // Found a match
+    if (ie_better_result) { // Found a match with LPM
         // Ex: r2 is forwarding packet for 1.2.3.4 over eth0 interface
         printf("%s is forwarding packet for %s over %s interface.\n",
                r->name, ip_buffer1, ie_better_result->interface_name);
@@ -160,50 +165,64 @@ void rs_send_packet(packet p, network_topology *top, int routerIndex) {
         re = &r->rt.table[i];
         result = p.dest_addr.s_addr & re->subnet_mask.s_addr;
         if (result == re->ip.s_addr) { // If matched, send to the next hop
-            next_hop = &re->gateway;
+            // Long prefix match
+            if (!re_better_result ||
+                re_better_result->subnet_mask_prefix < re->subnet_mask_prefix) {
+                re_better_result = re; // Stores the longer prefix 're'
+            }
+        }
+    }
+    if (re_better_result) { // Found a match with LPM
+        next_hop = &re_better_result->gateway;
 #if PROJECT_DEBUG
-            puts("Addresses matched. Searching next hop now...");
-            printf("Address (packet): ");
-            puts(inet_ntoa(re->ip));
-            printf("And the gateway is: ");
-            puts(inet_ntoa(*next_hop));
+        puts("Addresses matched. Searching next hop now...");
+        printf("Address (packet): ");
+        helper = re_better_result->ip;
+        helper.s_addr = htonl(helper.s_addr);
+        puts(inet_ntoa(helper));
+        printf("And the gateway is: ");
+        helper = *next_hop;
+        helper.s_addr = htonl(helper.s_addr);
+        puts(inet_ntoa(helper));
 #endif
-            // Verify all interface's table to see who is the next router in hop
-            for (j = 0; j < top->size; j++) {
-                if (j == routerIndex)
-                    continue;
+        // Verify all interface's table to see who is the next router in hop
+        for (i = 0; i < top->size; i++) {
+            if (i == routerIndex)
+                continue;
 #if PROJECT_DEBUG > 1
-                printf("Verifying interfaces for determine next hop <%d>...\n", j);
+            printf("Verifying interfaces for determine next hop <%d>...\n", j);
 #endif
-                for (k = 0; k < top->routers[j].it.size; k++) {
-                    ie = &top->routers[j].it.table[k];
+            for (j = 0; j < top->routers[i].it.size; j++) {
+                ie = &top->routers[i].it.table[j];
 #if PROJECT_DEBUG > 1
-                    printf("IP (from %s):", ie->interface_name);
-                    puts(inet_ntoa(ie->ip));
+                printf("IP (from %s):", ie->interface_name);
+                helper = ie->ip;
+                helper.s_addr = htonl(helper.s_addr);
+                puts(inet_ntoa(helper));
 #endif
-                    // If address is equal to the next_hop
-                    if (ie->ip.s_addr == next_hop->s_addr) {
-                        sprintf(ip_buffer2, "%s", inet_ntoa(*next_hop));
-                        // Ex: r1 is forwarding packet for 1.2.3.4 to next
-                        // hop 1.2.3.5 over eth1 interface
-                        printf("%s is forwarding packet for %s to next hop %s over"
-                                       " %s interface.\n", r->name, ip_buffer1,
-                               ip_buffer2, ie->interface_name);
-                        rs_send_packet(p, top, j);
-                        return;
-                    }
+                // If address is equal to the next_hop
+                if (ie->ip.s_addr == next_hop->s_addr) {
+                    helper = *next_hop;
+                    helper.s_addr = htonl(helper.s_addr);
+                    sprintf(ip_buffer2, "%s", inet_ntoa(helper));
+                    // Ex: r1 is forwarding packet for 1.2.3.4 to next
+                    // hop 1.2.3.5 over eth1 interface
+                    printf("%s is forwarding packet for %s to next hop %s over"
+                                   " %s interface.\n", r->name, ip_buffer1,
+                           ip_buffer2, ie->interface_name);
+                    rs_send_packet(p, top, i);
+                    return;
                 }
             }
         }
     }
-    sprintf(ip_buffer1, "%s", inet_ntoa(p.dest_addr));
     printf("%s is discarding packet %s because no destiny were found.\n",
            r->name, ip_buffer1);
 }
 
 void rs_debug(network_topology *data) {
     int i, j;
-    struct in_addr tmp;
+    struct in_addr helper; // Dummy var to show correct byte order to user
     router *r;
     routers_table_entry *re;
     interfaces_table_entry *ie;
@@ -221,15 +240,19 @@ void rs_debug(network_topology *data) {
             re = &r->rt.table[j];
             printf("-> ");
             printf("IP: ");
-            printf(inet_ntoa(re->ip));
+            helper = re->ip;
+            helper.s_addr = htonl(helper.s_addr);
+            printf(inet_ntoa(helper));
             printf("; ");
             printf("Subnet mask (/%d): ", re->subnet_mask_prefix);
-            tmp = re->subnet_mask;
-            //tmp.s_addr = htonl(tmp.s_addr);
-            printf(inet_ntoa(tmp));
+            helper = re->subnet_mask;
+            helper.s_addr = htonl(helper.s_addr);
+            printf(inet_ntoa(helper));
             printf("; ");
             printf("Gateway (net hop): ");
-            printf(inet_ntoa(re->gateway));
+            helper = re->gateway;
+            helper.s_addr = htonl(helper.s_addr);
+            printf(inet_ntoa(helper));
             printf("; ");
             printf("Interface: %s\n", re->interface_name);
         }
@@ -249,12 +272,14 @@ void rs_debug(network_topology *data) {
             printf("-> ");
             printf("Interface: %s; ", ie->interface_name);
             printf("Subnet mask (/%d): ", ie->subnet_mask_prefix);
-            tmp = ie->subnet_mask;
-            //tmp.s_addr = htonl(tmp.s_addr);
-            printf(inet_ntoa(tmp));
+            helper = ie->subnet_mask;
+            helper.s_addr = htonl(helper.s_addr);
+            printf(inet_ntoa(helper));
             printf("; ");
             printf("IP: ");
-            printf(inet_ntoa(ie->ip));
+            helper = ie->ip;
+            helper.s_addr = htonl(helper.s_addr);
+            printf(inet_ntoa(helper));
             printf("\n");
         }
         puts(MINOR_DIV_LINE);

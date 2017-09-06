@@ -5,7 +5,6 @@
 #include "lib/tp3opt.h"
 #include "lib/common.h"
 #include "lib/routers.h"
-#include "lib/packet.h"
 
 #define PRI_BIN_INT8            "%c%c%c%c%c%c%c%c"
 #define BYTE_TO_BIN_INT8(i)     \
@@ -23,7 +22,7 @@
 #define PRI_BIN_INT32           PRI_BIN_INT16 "." PRI_BIN_INT16
 #define BYTE_TO_BIN_INT32(i)    BYTE_TO_BIN_INT16((i) >> 16), BYTE_TO_BIN_INT16(i)
 
-#define TAB_FORMAT              "%12s"
+#define TAB_FORMAT              "%6s"
 
 rs_opt options;
 short shutdown_flag;
@@ -35,8 +34,6 @@ int main(int argc, char *argv[]) {
 
     network_topology top;
     packet rand_ip;
-    packet rand_sm;
-    struct in_addr ip_masked;
     int n;
 
     signal(SIGINT, sigint_handler);
@@ -52,17 +49,23 @@ int main(int argc, char *argv[]) {
         rs_debug(&top);
     puts("Press any key to continue and generate first package...");
     getchar();
-    puts(DIV_LINE);
     for (n = 0; !shutdown_flag; n++) {
+        puts(DIV_LINE);
         puts(MINOR_DIV_LINE);
         puts("Generating random IP address...");
         pkt_generate_random_ip(&rand_ip);
         if (options.debug_opt)
             debug_print_address_data("IP", rand_ip.dest_addr);
+        puts(MINOR_DIV_LINE);
+        puts("Sending packet generate over network...");
+        puts(MINOR_DIV_LINE);
         rs_send_packet(rand_ip, &top, 0);
+        puts(MINOR_DIV_LINE);
         puts("Press any key to generate another package...");
+        puts(MINOR_DIV_LINE);
         getchar();
     }
+    puts(DIV_LINE);
     puts("\nExiting application...");
     rs_close(&top);
     sleep(1);
