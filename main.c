@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
     rs_open(options.router_tables_file, options.interface_info_files, top);
     if (options.debug_opt)
         rs_debug(top);
-    puts("Press any key to continue and generate first package...");
+    puts("Press any key to continue and generate first packet...");
     getchar();
     for (n = 0; !shutdown_flag; n++) {
         puts(DIV_LINE);
@@ -65,11 +65,11 @@ int main(int argc, char *argv[]) {
         if (options.debug_opt)
             debug_print_address_data("IP", rand_ip.dest_addr);
         puts(MINOR_DIV_LINE);
-        puts("Sending packet generate over network...");
+        puts("Sending generated packet over network...");
         puts(MINOR_DIV_LINE);
         rs_send_packet(rand_ip, top, 0);
         puts(MINOR_DIV_LINE);
-        puts("Press any key to generate another package...");
+        puts("Press any key to generate another packet...");
         puts(MINOR_DIV_LINE);
         getchar();
     }
