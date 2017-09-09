@@ -61,6 +61,8 @@ void rs_get_interface_tables_data(FILE *, network_topology *);
 
 void rs_send_packet(packet, network_topology *, int);
 
+void rs_exec(network_topology *, int);
+
 void rs_debug(network_topology *);
 
 void rs_close(network_topology *);

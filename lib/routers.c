@@ -3,7 +3,6 @@
 #include <arpa/inet.h>
 #include "routers.h"
 #include "common.h"
-#include "packet.h"
 #include "debug.h"
 
 #define REGISTRY_SIZE 60
@@ -109,6 +108,15 @@ void rs_get_interface_tables_data(FILE *source, network_topology *data) {
             ie->ip.s_addr = htonl(ie->ip.s_addr);
         }
     }
+}
+
+void rs_exec(network_topology *top, int routerIndex) {
+    /*while (1) {
+        // TODO implement pipes for IPC between routes (connect all to all)
+        // TODO each router will then call this function
+        // TODO copy rs_send_packet function to here and remove recursion
+        // TODO instead of recursion, send data to another router (process)
+    }*/
 }
 
 void rs_send_packet(packet p, network_topology *top, int routerIndex) {

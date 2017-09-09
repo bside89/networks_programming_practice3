@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/mman.h>
 #include "lib/tp3opt.h"
 #include "lib/common.h"
 #include "lib/routers.h"
@@ -28,11 +29,12 @@ rs_opt options;
 short shutdown_flag;
 
 void sigint_handler(int);
+
 void debug_print_address_data(const char*, struct in_addr);
 
 int main(int argc, char *argv[]) {
 
-    network_topology top;
+    network_topology *top;
     packet rand_ip;
     int n;
 
@@ -43,10 +45,16 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "A error occurred. Exiting application.\n");
         return EXIT_FAILURE;
     }
-    memset(&top, 0, sizeof(top));
-    rs_open(options.router_tables_file, options.interface_info_files, &top);
+    // Shared memory for processes (routers)
+    top = mmap(NULL, sizeof(network_topology), PROT_READ | PROT_WRITE,
+               MAP_ANONYMOUS | MAP_SHARED, 0, 0);
+    if (top == MAP_FAILED) {
+        perror("mmap");
+        exit(EXIT_FAILURE);
+    }
+    rs_open(options.router_tables_file, options.interface_info_files, top);
     if (options.debug_opt)
-        rs_debug(&top);
+        rs_debug(top);
     puts("Press any key to continue and generate first package...");
     getchar();
     for (n = 0; !shutdown_flag; n++) {
@@ -59,7 +67,7 @@ int main(int argc, char *argv[]) {
         puts(MINOR_DIV_LINE);
         puts("Sending packet generate over network...");
         puts(MINOR_DIV_LINE);
-        rs_send_packet(rand_ip, &top, 0);
+        rs_send_packet(rand_ip, top, 0);
         puts(MINOR_DIV_LINE);
         puts("Press any key to generate another package...");
         puts(MINOR_DIV_LINE);
@@ -67,7 +75,10 @@ int main(int argc, char *argv[]) {
     }
     puts(DIV_LINE);
     puts("\nExiting application...");
-    rs_close(&top);
+    rs_close(top);
+    if (munmap(top, sizeof(network_topology)) == -1) {
+        perror("munmap");
+    }
     sleep(1);
     return 0;
 }
